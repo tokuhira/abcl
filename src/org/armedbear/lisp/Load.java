@@ -57,7 +57,7 @@ public final class Load
     public static final LispObject load(String filename)
     {
         final LispThread thread = LispThread.currentThread();
-        return load(new Pathname(filename),
+        return load((Pathname)Pathname.create(filename),
                     Symbol.LOAD_VERBOSE.symbolValue(thread) != NIL,
                     Symbol.LOAD_PRINT.symbolValue(thread) != NIL,
                     true);
@@ -66,58 +66,54 @@ public final class Load
     /** @return Pathname of loadable file based on NAME, or null if
      * none can be determined. */
     private static final Pathname findLoadableFile(Pathname name) {
-        LispObject truename  = Pathname.truename(name, false);
-        if (truename instanceof Pathname) {
-            Pathname t = (Pathname)truename;
-            if (t.name != NIL
-                && t.name != null) {
-                return t;
-            }
+      LispObject truename  = Symbol.PROBE_FILE.execute(name);
+      if (truename instanceof Pathname) {
+        Pathname t = (Pathname)truename;
+        if (t.getName() != NIL
+            && t.getName() != null) {
+          return t;
         }
-        final String COMPILE_FILE_TYPE = Lisp._COMPILE_FILE_TYPE_.symbolValue().getStringValue();
-        if (name.type == NIL
-            && (name.name != NIL || name.name != null)) {
-            Pathname lispPathname = new Pathname(name);
-            lispPathname.type = new SimpleString("lisp");
-            lispPathname.invalidateNamestring();
-            LispObject lisp = Pathname.truename(lispPathname, false);
-            Pathname abclPathname = new Pathname(name);
-            abclPathname.type = new SimpleString(COMPILE_FILE_TYPE);
-            abclPathname.invalidateNamestring();
-            LispObject abcl = Pathname.truename(abclPathname, false);
-            if (lisp instanceof Pathname && abcl instanceof Pathname) {
-              lispPathname = (Pathname)lisp;
-              abclPathname = (Pathname)abcl;
-              long lispLastModified = lispPathname.getLastModified();
-              long abclLastModified = abclPathname.getLastModified();
-              if (abclLastModified > lispLastModified) {
-                  return abclPathname;  // fasl file is newer
-              } else {
-                  return lispPathname;
-              }
-            } else if (abcl instanceof Pathname) {
-                return (Pathname) abcl;
-            } else if (lisp instanceof Pathname) { 
-                return (Pathname) lisp;
-            }
+      }
+      final String COMPILE_FILE_TYPE = Lisp._COMPILE_FILE_TYPE_.symbolValue().getStringValue();
+      if (name.getType() == NIL
+          && (name.getName() != NIL || name.getName() != null)) {
+        Pathname lispPathname = Pathname.create(name);
+        lispPathname.setType(new SimpleString("lisp"));
+        LispObject lisp = Symbol.PROBE_FILE.execute(lispPathname);
+        Pathname abclPathname = Pathname.create(name);
+        abclPathname.setType(new SimpleString(COMPILE_FILE_TYPE));
+        LispObject abcl = Symbol.PROBE_FILE.execute(abclPathname);
+        if (lisp instanceof Pathname && abcl instanceof Pathname) {
+          lispPathname = (Pathname)lisp;
+          abclPathname = (Pathname)abcl;
+          long lispLastModified = lispPathname.getLastModified();
+          long abclLastModified = abclPathname.getLastModified();
+          if (abclLastModified > lispLastModified) {
+            return abclPathname;  // fasl file is newer
+          } else {
+            return lispPathname;
+          }
+        } else if (abcl instanceof Pathname) {
+          return (Pathname) abcl;
+        } else if (lisp instanceof Pathname) { 
+          return (Pathname) lisp;
         }
-        if (name.isJar()) {
-            if (name.type.equals(NIL)) {
-                name.type = COMPILE_FILE_INIT_FASL_TYPE;
-                name.invalidateNamestring();
-                Pathname result = findLoadableFile(name);
-                if (result != null) {
-                    return result;
-                }
-                name.type = new SimpleString(COMPILE_FILE_TYPE);
-                name.invalidateNamestring();
-                result = findLoadableFile(name);
-                if (result != null) {
-                    return result;
-                }
-            }
+      }
+      if (name.isJar()) {
+        if (name.getType().equals(NIL)) {
+          name.setType(COMPILE_FILE_INIT_FASL_TYPE);
+          Pathname result = findLoadableFile(name);
+          if (result != null) {
+            return result;
+          }
+          name.setType(new SimpleString(COMPILE_FILE_TYPE));
+          result = findLoadableFile(name);
+          if (result != null) {
+            return result;
+          }
         }
-        return null;
+      }
+      return null;
     }
   
     public static final LispObject load(Pathname pathname,
@@ -160,61 +156,54 @@ public final class Load
             mergedPathname = Pathname.mergePathnames(pathname, pathnameDefaults);
         }
         Pathname loadableFile = findLoadableFile(mergedPathname != null ? mergedPathname : pathname);
-        Pathname truename = coercePathnameOrNull(Pathname.truename(loadableFile));
-
+        Pathname truename = (loadableFile != null
+                             ? (Pathname)Symbol.PROBE_FILE.execute(loadableFile)
+                             : null);
+        
         if (truename == null || truename.equals(NIL)) {
-            if (ifDoesNotExist) {
-                return error(new FileError("File not found: " + pathname.princToString(), pathname));
-            } else {
-                Debug.warn("Failed to load " + pathname.getNamestring());
-                return NIL;
-            }
+          if (ifDoesNotExist) {
+            return error(new FileError("File not found: " + pathname.princToString(), pathname));
+          } else {
+            Debug.warn("Failed to load " + pathname.getNamestring());
+            return NIL;
+          }
         }
 
-        if (Utilities.checkZipFile(truename)) {
-            String n = truename.getNamestring();
-            String name = Pathname.uriEncode(truename.name.getStringValue());
-            if (n.startsWith("jar:")) {
-                n = "jar:" + n + "!/" + name + "."
-                    + COMPILE_FILE_INIT_FASL_TYPE;
-	    } else if (n.startsWith("zip:")) {
-                n = "zip:" + n + "!/" + name + "."
-                    + COMPILE_FILE_INIT_FASL_TYPE;
+        if (ZipCache.checkZipFile(truename)) {
+          if (truename instanceof JarPathname) {
+            truename = JarPathname.createFromEntry((JarPathname)truename);
+          } else {
+            truename = JarPathname.createFromPathname(truename);
+          }
+          Pathname loader = Pathname.create("__loader__._"); // FIXME use constants
+          mergedPathname = (Pathname)Symbol.MERGE_PATHNAMES.execute(loader, truename);
+
+          LispObject initTruename = Symbol.PROBE_FILE.execute(mergedPathname);
+          if (initTruename.equals(NIL)) {
+            // Maybe the enclosing JAR has been renamed?
+            Pathname p = Pathname.create(mergedPathname);
+            p.setName(Keyword.WILD);
+            LispObject result = Symbol.MATCH_WILD_JAR_PATHNAME.execute(p);
+            
+            if (result instanceof Cons
+                && ((Cons)result).length() == 1
+                && ((Cons)result).car() instanceof Pathname) {
+              initTruename = (Pathname)result.car();
             } else {
-                n = "jar:file:" + Pathname.uriEncode(n) + "!/" + name + "."
-                    + COMPILE_FILE_INIT_FASL_TYPE;
+              String errorMessage
+                = "Loadable FASL not found for "
+                + pathname.printObject() 
+                + " in "
+                + mergedPathname.printObject();
+              if (ifDoesNotExist) {
+                return error(new FileError(errorMessage, mergedPathname));
+              } else {
+                Debug.trace(errorMessage);
+                return NIL;
+              }
             }
-            if (!((mergedPathname = new Pathname(n)) instanceof Pathname)) {
-              return error(new FileError((MessageFormat.format("Failed to address JAR-PATHNAME truename {0} for name {1}", truename.princToString(), name)), truename));
-            }
-
-            LispObject initTruename = coercePathnameOrNull(Pathname.truename(mergedPathname));
-            if (initTruename == null || initTruename.equals(NIL)) {
-                // Maybe the enclosing JAR has been renamed?
-                Pathname p = new Pathname(mergedPathname);
-                p.name = Keyword.WILD;
-                p.invalidateNamestring();
-                LispObject result = Pathname.MATCH_WILD_JAR_PATHNAME.execute(p);
-
-                if      (result instanceof Cons
-                    && ((Cons)result).length() == 1
-                    && ((Cons)result).car() instanceof Pathname) {
-                    initTruename = (Pathname)result.car();
-                } else {
-                  String errorMessage
-                      = "Loadable FASL not found for "
-                      + "'" + pathname.printObject() + "'"
-                      + " in "
-                      + "'" + mergedPathname.printObject() + "'";
-                  if (ifDoesNotExist) {
-                      return error(new FileError(errorMessage, mergedPathname));
-                  } else {
-                      Debug.trace(errorMessage);
-                      return NIL;
-                  }
-                }
-            }
-            truename = (Pathname)initTruename;
+          }
+          truename = (Pathname)initTruename;
         } 
 				
         InputStream in = truename.getInputStream();
@@ -269,6 +258,7 @@ public final class Load
     }
 
     private static final Symbol FASL_LOADER = PACKAGE_SYS.intern("*FASL-LOADER*");
+  /** A file with this type in a packed FASL denotes the initial loader */
     static final LispObject COMPILE_FILE_INIT_FASL_TYPE = new SimpleString("_");
 
     private static final Pathname coercePathnameOrNull(LispObject p) {
@@ -293,17 +283,27 @@ public final class Load
         InputStream in = null;
         Pathname pathname = null;
         Pathname truename = null;
-        pathname = new Pathname(filename);
+        pathname = (Pathname)Pathname.create(filename);
         LispObject bootPath = Site.getLispHome();
         Pathname mergedPathname;
         if (bootPath instanceof Pathname) {
-            mergedPathname = Pathname.mergePathnames(pathname, (Pathname)bootPath);
+          mergedPathname = (Pathname)Symbol.MERGE_PATHNAMES.execute(pathname, bootPath);
+          // So a PROBE-FILE won't attempt to merge when
+          // *DEFAULT-PATHNAME-DEFAULTS* is a JAR
+          if (mergedPathname.getDevice().equals(NIL)
+              && !Utilities.isPlatformWindows) {
+            mergedPathname.setDevice(Keyword.UNSPECIFIC);
+          }
         } else {
-            mergedPathname = pathname;
+          mergedPathname = pathname;
         }
         URL url = null;
         Pathname loadableFile = findLoadableFile(mergedPathname);
-        truename = coercePathnameOrNull(Pathname.truename(loadableFile));
+        if (loadableFile == null) {
+          truename = null;
+        } else {
+          truename = (Pathname)Symbol.PROBE_FILE.execute(loadableFile);
+        }
         
         final String COMPILE_FILE_TYPE 
           = Lisp._COMPILE_FILE_TYPE_.symbolValue().getStringValue();
@@ -324,13 +324,13 @@ public final class Load
                                            + " in boot classpath."));
             }                
             if (!bootPath.equals(NIL)) {
-                Pathname urlPathname = new Pathname(url);
-							  loadableFile = findLoadableFile(urlPathname);
-								truename = (Pathname)Pathname.truename(loadableFile);
-                if (truename == null) {
-                    return error(new LispError("Failed to find loadable system file in boot classpath "
-                                               + "'" + url + "'"));
-                }
+              Pathname urlPathname = (Pathname)URLPathname.create(url);
+              loadableFile = findLoadableFile(urlPathname);
+              truename = (Pathname)Symbol.PROBE_FILE.execute(loadableFile);
+              if (truename.equals(NIL)) {
+                return error(new LispError("Failed to find loadable system file in boot classpath "
+                                           + "'" + url + "'"));
+              }
             } else {
                 truename = null; // We can't represent the FASL in a Pathname (q.v. OSGi)
             }
@@ -338,11 +338,11 @@ public final class Load
 
         // Look for a init FASL inside a packed FASL
         if (truename != null
-            && truename.type.princToString().equals(COMPILE_FILE_TYPE) && Utilities.checkZipFile(truename))  {
-            Pathname init = new Pathname(truename.getNamestring());
-            init.type = COMPILE_FILE_INIT_FASL_TYPE;
-            init.name = new SimpleString("__loader__");
-            LispObject t = Pathname.truename(init);
+            && truename.getType().princToString().equals(COMPILE_FILE_TYPE) && ZipCache.checkZipFile(truename))  {
+          Pathname init = (Pathname)Pathname.create(truename.getNamestring());
+            init.setType(COMPILE_FILE_INIT_FASL_TYPE);
+            init.setName(new SimpleString("__loader__"));
+            LispObject t = Symbol.PROBE_FILE.execute(init);
             if (t instanceof Pathname) {
                 truename = (Pathname)t;
             } else {
@@ -525,47 +525,56 @@ public final class Load
             Pathname truePathname = null;
             if (!truename.equals(NIL)) {
                 if (truename instanceof Pathname) {
-                    truePathname = new Pathname((Pathname)truename);
+                  if (truename instanceof JarPathname) {
+                    truePathname = new JarPathname();
+                  } else if (truename instanceof URLPathname) {
+                    truePathname = new URLPathname();
+                  } else {
+                    truePathname = new Pathname();
+                  }
+                  truePathname.copyFrom((Pathname)truename);
                 } else if (truename instanceof AbstractString) {
-                    truePathname = new Pathname(truename.getStringValue());
+                  truePathname = (Pathname)Pathname.create(truename.getStringValue());
                 } else {
                     Debug.assertTrue(false);
                 }
-                String type = truePathname.type.getStringValue();
-                if (type.equals(Lisp._COMPILE_FILE_TYPE_.symbolValue(thread).getStringValue())
-                    || type.equals(COMPILE_FILE_INIT_FASL_TYPE.toString())) {
-                    Pathname truenameFasl = new Pathname(truePathname);
+                if (truePathname.getType().equal(Lisp._COMPILE_FILE_TYPE_.symbolValue(thread))
+                    || truePathname.getType().equal(COMPILE_FILE_INIT_FASL_TYPE)) {
+                    Pathname truenameFasl = Pathname.create(truePathname);
                     thread.bindSpecial(Symbol.LOAD_TRUENAME_FASL, truenameFasl);
                 }
-                if (truePathname.type.getStringValue()
-                    .equals(COMPILE_FILE_INIT_FASL_TYPE.getStringValue())
+                if (truePathname.getType().equal(COMPILE_FILE_INIT_FASL_TYPE)
                     && truePathname.isJar()) {
-                    if (truePathname.device.cdr() != NIL ) {
-                        // We set *LOAD-TRUENAME* to the argument that
-                        // a user would pass to LOAD.
-                        Pathname enclosingJar = (Pathname)truePathname.device.cdr().car();
-                        truePathname.device = new Cons(truePathname.device.car(), NIL);
-                        truePathname.host = NIL;
-                        truePathname.directory = enclosingJar.directory;
-                        if (truePathname.directory.car().equals(Keyword.RELATIVE)) {
-                            truePathname.directory.setCar(Keyword.ABSOLUTE);
-                        }
-                        truePathname.name = enclosingJar.name;
-                        truePathname.type = enclosingJar.type;
-                        truePathname.invalidateNamestring();
+                  // We set *LOAD-TRUENAME* to the argument that a
+                  // user would pass to LOAD.
+                  LispObject possibleTruePathname = probe_file.PROBE_FILE.execute(pathname);
+                  if (!possibleTruePathname.equals(NIL)) {
+                    truePathname = (Pathname) possibleTruePathname;
+                  }
+                  /*
+                  if (truePathname.getDevice().cdr() != NIL ) {
+                    Pathname enclosingJar = (Pathname)truePathname.getDevice().cdr().car();
+                    truePathname.setDevice(new Cons(truePathname.getDevice().car(), NIL));
+                    truePathname.setHost(NIL);
+                    truePathname.setDirectory(enclosingJar.getDirectory());
+                    if (truePathname.getDirectory().car().equals(Keyword.RELATIVE)) {
+                      truePathname.getDirectory().setCar(Keyword.ABSOLUTE);
+                    }
+                    truePathname.setName(enclosingJar.getName());
+                    truePathname.setType(enclosingJar.getType());
                     } else {
                         // XXX There is something fishy in the asymmetry
                         // between the "jar:jar:http:" and "jar:jar:file:"
                         // cases but this currently passes the tests.
                         if (!(truePathname.device.car() instanceof AbstractString)) {
-                          assert truePathname.device.car() instanceof Pathname;
-                          Pathname p = new Pathname((Pathname)truePathname.device.car());
+                          //                          assert truePathname.getDevice().car() instanceof Pathname;
+                          //                          Pathname p = Pathname.create((Pathname)truePathname.getDevice().car());
                           truePathname 
-                            = (Pathname) probe_file.PROBE_FILE.execute(p);
-                          truePathname.invalidateNamestring();
+                            = (Pathname) probe_file.PROBE_FILE.execute(pathname);
                         }
                     }
-                    thread.bindSpecial(Symbol.LOAD_TRUENAME, truePathname);
+                  */
+                  thread.bindSpecial(Symbol.LOAD_TRUENAME, truePathname);
                 } else {
                     thread.bindSpecial(Symbol.LOAD_TRUENAME, truename);
                 }

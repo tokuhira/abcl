@@ -28,12 +28,12 @@ public class PathnameTest
     } catch (MalformedURLException e) {
         System.out.println(e.getMessage());
     }
-    Pathname pathname = new Pathname(url);
+    Pathname pathname = (Pathname)URLPathname.create(url);
     assertNotNull(pathname);
     assertNotNull(pathname.getNamestring());
-    assertNotNull(pathname.name);
-    assertNotNull(pathname.type);
-    assertNotNull(pathname.directory);
+    assertNotNull(pathname.getName());
+    assertNotNull(pathname.getType());
+    assertNotNull(pathname.getDirectory());
   }
   
   @Test
@@ -59,26 +59,26 @@ public class PathnameTest
 
   @Test
   public void copyConstructor() {
-      Pathname orig = new Pathname("/a/b/c/d/e/foo.lisp");
-      Pathname copy = new Pathname(orig.getNamestring());
-      assertTrue(orig.getNamestring().equals(copy.getNamestring()));
+    Pathname orig = (Pathname)Pathname.create("/a/b/c/d/e/foo.lisp");
+    Pathname copy = (Pathname)Pathname.create(orig.getNamestring());
+    assertTrue(orig.getNamestring().equals(copy.getNamestring()));
   }
 
   @Test
   public void mergePathnames1() {
-      Pathname p = new Pathname("a/b/c/d/foo.lisp");
-      Pathname d = new Pathname("/foo/bar/there");
-      Pathname r = Pathname.mergePathnames(p, d);
-      String s = r.getNamestring();
-      assertTrue(s.equals("/foo/bar/a/b/c/d/foo.lisp"));
+    Pathname p = (Pathname)Pathname.create("a/b/c/d/foo.lisp");
+    Pathname d = (Pathname)Pathname.create("/foo/bar/there");
+    Pathname r = (Pathname)Pathname.mergePathnames(p, d);
+    String s = r.getNamestring();
+    assertTrue(s.equals("/foo/bar/a/b/c/d/foo.lisp"));
   }
 
   @Test
   public void mergePathnames2() {
-      Pathname p = new Pathname("/a/b/c/d/foo.lisp");
-      Pathname d = new Pathname("/foo/bar/there");
-      Pathname r = Pathname.mergePathnames(p, d);
-      assertTrue(r.getNamestring().equals("/a/b/c/d/foo.lisp"));
+    Pathname p = (Pathname)Pathname.create("/a/b/c/d/foo.lisp");
+    Pathname d = (Pathname)Pathname.create("/foo/bar/there");
+    Pathname r = (Pathname)Pathname.mergePathnames(p, d);
+    assertTrue(r.getNamestring().equals("/a/b/c/d/foo.lisp"));
   }
 
   @Test
@@ -87,31 +87,53 @@ public class PathnameTest
       args = args.push(Keyword.TYPE);
       args = args.push(new SimpleString("abcl-tmp"));
       args = args.nreverse();
-      Pathname p = Pathname.makePathname(args);
-      Pathname d = new Pathname("/foo/bar.abcl");
-      Pathname r = Pathname.mergePathnames(p, d);
+      Pathname p = (Pathname)Pathname.makePathname(args);
+      Pathname d = (Pathname)Pathname.create("/foo/bar.abcl");
+      Pathname r = (Pathname)Pathname.mergePathnames(p, d);
       assertTrue(r.getNamestring().equals("/foo/bar.abcl-tmp"));
   }
 
-  @Test
-  public void mergePathnames4() {
-      Pathname p = new Pathname("jar:file:foo.jar!/bar.abcl");
-      Pathname d = new Pathname("/a/b/c/");
-      Pathname r = Pathname.mergePathnames(p, d);
-      String s = r.getNamestring();
-      assertTrue(s.equals("jar:file:/a/b/c/foo.jar!/bar.abcl"));
-  }
+// Currently we disallow construction of relative pathname JARs
+//  @Test
+//  public void mergePathnames4() {
+//    Pathname p = (Pathname)Pathname.create("jar:file:foo.jar!/bar.abcl");
+//    Pathname d = (Pathname)Pathname.create("/a/b/c/");
+//    Pathname r = (Pathname)Pathname.mergePathnames(p, d);
+//    String s = r.getNamestring();
+//    assertTrue(s.equals("jar:file:///a/b/c/foo.jar!/bar.abcl"));
+//  }
   @Test 
   public void constructorFileDirectory() {
-    Pathname p = new Pathname("file://tmp/");
+    Pathname p = (Pathname)Pathname.create("file:///tmp/");
     assertTrue(p.getNamestring().endsWith("/"));
   }
   @Test 
-    public void constructorFileWindowsDevice() {
-    Pathname p = new Pathname("file:c://tmp/");
+  public void constructorFileWindowsDevice() {
+    Pathname p = (Pathname)Pathname.create("file:c://tmp/");
     LispObject device = p.getDevice();
     if (Utilities.isPlatformWindows) {
       assert(device != Lisp.NIL);
     }
+  }
+  // Necessary for ASDF output translations to work
+  @Test
+  public void wildInferiorsJars() {
+    String namestring = "jar:file:///**/*.jar!/**/*.*";
+    Pathname p = (Pathname)Pathname.create(namestring);
+    String parsedNamestring = p.getNamestring();
+    assertTrue(parsedNamestring.equals(namestring));
+  }
+  
+  @Test
+  public void equality() {
+    Pathname p1 = (Pathname)Pathname.create("file:///tmp/");
+    Pathname p2 = (Pathname)Pathname.create("file:///tmp/");
+    boolean result = p1.equals(p2);
+    assertTrue("Java equals() for Pathname", result);
+
+    JarPathname p3 = (JarPathname)Pathname.create("jar:file:///abcl.jar!/tmp/");
+    JarPathname p4 = (JarPathname)Pathname.create("jar:file:///abcl.jar!/tmp/");
+    result = p3.equals(p4);
+    assertTrue("Java equals() for PathnameJar", result);
   }
 }

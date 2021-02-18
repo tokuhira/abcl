@@ -64,9 +64,8 @@ public final class unzip
     public LispObject execute(LispObject first, LispObject second) {
         Pathname zipFile = coerceToPathname(first);
         Pathname directory = coerceToPathname(second);
-        directory.name = NIL;
-        directory.type = NIL;
-        directory.invalidateNamestring();
+        directory.setName(NIL);
+        directory.setType(NIL);
         return unzipToDirectory(zipFile, directory);
     }
   
@@ -75,7 +74,7 @@ public final class unzip
             zipPath = Pathname.mergePathnames(zipPath,
                                               coerceToPathname(Symbol.DEFAULT_PATHNAME_DEFAULTS.symbolValue()));
         }
-        LispObject o = Pathname.truename(zipPath, false);
+        LispObject o = Symbol.PROBE_FILE.execute(zipPath);
         if (!(o instanceof Pathname)) {
             return error(new FileError("No file found: " + zipPath, zipPath));
         }
@@ -109,7 +108,7 @@ public final class unzip
                 }
                 out.close();
                 in.close();
-                result = result.push(new Pathname(filename));
+                result = result.push(Pathname.create(filename));
             }
         } catch (IOException e) {
             return error(new FileError("Failed to unzip " 

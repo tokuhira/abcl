@@ -54,35 +54,37 @@
 (defun component-match-wild-p (thing wild ignore-case)
   (let ((testfunc (if ignore-case #'equalp #'equal)))
     (labels ((split-string (delim str)
-	       (flet ((finder (char) (find char delim)))
-		 (loop  for x = (position-if-not #'finder str) then
-		      (position-if-not #'finder str :start (or y (length str)))
-		    for y = (position-if #'finder str :start x) then
-		      (position-if #'finder str :start (or x (length str))) while x 
-		    collect (subseq str x y))))
-	     (positions-larger (thing substrings previous-pos)
-	       (let ((new-pos (search (car substrings) 
-				      thing 
-				      :start2 previous-pos
-				      :test testfunc)))
-		 (or 
-		  (not substrings)
-		  (and new-pos
-		       (>= new-pos previous-pos)
-		       (positions-larger thing 
-					 (cdr substrings) 
-					 new-pos))))))
+               (flet ((finder (char) (find char delim)))
+                 (loop
+                   :for x = (position-if-not #'finder str)
+                     :then (position-if-not #'finder str :start (or y (length str)))
+                   :for y = (position-if #'finder str :start (or x (length str)))
+                     :then (position-if #'finder str :start (or x (length str)))
+                   :while x 
+                    :collect (subseq str x y))))
+             (positions-larger (thing substrings previous-pos)
+               (let ((new-pos (search (car substrings) 
+                                      thing 
+                                      :start2 previous-pos
+                                      :test testfunc)))
+                 (or 
+                  (not substrings)
+                  (and new-pos
+                       (>= new-pos previous-pos)
+                       (positions-larger thing 
+                                         (cdr substrings) 
+                                         new-pos))))))
       (let ((split-result (split-string "*" wild)))
-	(and (positions-larger thing split-result 0)
-	     (if (eql (elt wild 0) #\*)
-		 t
-		 (eql (search (first split-result) thing :test testfunc) 0))
-	     (if (eql (elt wild (1- (length wild))) #\*)
-		 t
-		 (let ((last-split-result (first (last split-result))))
-		   (eql (search last-split-result thing :from-end t 
-				:test testfunc)
-			(- (length thing) (length last-split-result))))))))))
+        (and (positions-larger thing split-result 0)
+             (if (eql (elt wild 0) #\*)
+                 t
+                 (eql (search (first split-result) thing :test testfunc) 0))
+             (if (eql (elt wild (1- (length wild))) #\*)
+                 t
+                 (let ((last-split-result (first (last split-result))))
+                   (eql (search last-split-result thing :from-end t 
+                                :test testfunc)
+                        (- (length thing) (length last-split-result))))))))))
 
 (defun component-match-p (thing wild ignore-case)
   (cond ((eq wild :wild)
@@ -90,7 +92,7 @@
         ((null wild)
          t)
         ((and (stringp wild) (position #\* wild))
-	 (component-match-wild-p thing wild ignore-case))
+         (component-match-wild-p thing wild ignore-case))
         (ignore-case
          (equalp thing wild))
         (t
@@ -449,8 +451,7 @@
   (unless (pathname-url-p p)
     (error "~A is not a URL pathname." p))
   (let ((host (pathname-host p)))
-    (setf (getf host :scheme) v))
-  (%invalidate-namestring p))
+    (setf (getf host :scheme) v)))
 
 (defsetf url-pathname-scheme set-url-pathname-scheme)
 
@@ -463,8 +464,8 @@
   (unless (pathname-url-p p)
     (error "~A is not a URL pathname." p))
   (let ((host (pathname-host p)))
-    (setf (getf host :authority) v))
-  (%invalidate-namestring p))
+    (setf (getf host :authority) v)))
+
 
 (defsetf url-pathname-authority set-url-pathname-authority)
 
@@ -477,8 +478,7 @@
   (unless (pathname-url-p p)
     (error "~A is not a URL pathname." p))
   (let ((host (pathname-host p)))
-    (setf (getf host :query) v))
-  (%invalidate-namestring p))
+    (setf (getf host :query) v)))
 
 (defsetf url-pathname-query set-url-pathname-query)
 
@@ -491,8 +491,7 @@
   (unless (pathname-url-p p)
     (error "~A is not a URL pathname." p))
   (let ((host (pathname-host p)))
-    (setf (getf host :fragment) v))
-  (%invalidate-namestring p))
+    (setf (getf host :fragment) v)))
 
 (defsetf url-pathname-fragment set-url-pathname-fragment)
 

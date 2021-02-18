@@ -49,23 +49,21 @@ public final class Site
             if (!s.endsWith(fileSeparator)) {
                 s += fileSeparator;
             }
-            LISP_HOME = new Pathname(s);
+            LISP_HOME = Pathname.create(s);
             return;
         }
-        URL url = Lisp.class.getResource("boot.lisp");
+        URL url = Lisp.class.getResource("boot.lisp"); // what if this was "__loader__._"?!!
         if (url != null) {
             if (!Pathname.isSupportedProtocol(url.getProtocol())) {
                 LISP_HOME = NIL;
             } else {
-                Pathname p = new Pathname(url);
-                p.name = NIL;
-                p.type = NIL;
-                p.invalidateNamestring();
-                LISP_HOME = p;
+              Pathname p = (Pathname)URLPathname.create(url);
+              p.setName(NIL).setType(NIL);
+              LISP_HOME = p;
             }
             return;
         }
-        Debug.trace("Unable to determine LISP_HOME.");
+        simple_error("Unable to determine LISP_HOME.");
     }
 
     public static final LispObject getLispHome()

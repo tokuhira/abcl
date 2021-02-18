@@ -112,13 +112,13 @@ public final class zip extends Primitive
                                               zipfilePathname.princToString()));
             ZipOutputStream out =
                 new ZipOutputStream(new FileOutputStream(zipfileNamestring));
-            Pathname root = (Pathname) Pathname.truename(coerceToPathname(third));
+            Pathname root = (Pathname) Symbol.PROBE_FILE.execute(third);
             String rootPath = root.getDirectoryNamestring();
             int rootPathLength = rootPath.length();
             Set<String> directories = new HashSet<String>();
             LispObject list = second;
             while (list != NIL) {
-                Pathname pathname = (Pathname) Pathname.truename(coerceToPathname(list.car()));
+              Pathname pathname = (Pathname) Symbol.PROBE_FILE.execute(list.car());
                 String namestring = pathname.getNamestring();
                 if (namestring == null) {
                     // Clean up before signalling error.
@@ -134,9 +134,9 @@ public final class zip extends Primitive
                   String d = dir.substring(rootPathLength);
                   int i = 0;
                   int j;
-                  while ((j = d.indexOf(Pathname.separator, i)) != -1) {
+                  while ((j = d.indexOf(Pathname.directoryDelimiter, i)) != -1) {
                     i = j + 1;
-                    directory = d.substring(0, j) + Pathname.separator;
+                    directory = d.substring(0, j) + Pathname.directoryDelimiter;
                     if (!directories.contains(directory)) {
                       directories.add(directory);
                       ZipEntry entry = new ZipEntry(directory);
@@ -176,9 +176,9 @@ public final class zip extends Primitive
         {
             int i = 0;
             int j;
-            while ((j = path.indexOf(Pathname.separator, i)) != -1) {
+            while ((j = path.indexOf(Pathname.directoryDelimiter, i)) != -1) {
                 i = j + 1;
-                final String directory = path.substring(0, j) + Pathname.separator;
+                final String directory = path.substring(0, j) + Pathname.directoryDelimiter;
                 if (!contains(directory)) {
                     add(directory);
                     ZipEntry entry = new ZipEntry(directory);

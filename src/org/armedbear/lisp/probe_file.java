@@ -46,12 +46,27 @@ public final class probe_file
                returns="truename")
     private static final class pf_probe_file extends Primitive {
         pf_probe_file() {
-            super("probe-file", "pathspec");
+            super(Symbol.PROBE_FILE, "pathspec");
         }
         @Override
         public LispObject execute(LispObject arg)
         {
-            return Pathname.truename(arg, false);
+	  if (arg == null || arg.equals(NIL)) {
+	    return NIL;
+	  }
+          Pathname p = coerceToPathname(arg);
+          if (p.isWild()) {
+            return error(new FileError("Cannot find the TRUENAME for a wild pathname.",
+                                       p));
+          }
+          // TODO: refactor Pathname{,Jar,URL}.truename() to be non-static?
+          if (p instanceof JarPathname) {
+            return JarPathname.truename(p, false);
+          } else if (p instanceof URLPathname) {
+            return URLPathname.truename((URLPathname)p, false);
+          } else {
+            return Pathname.truename(p, false);
+          }
         }
     };
 
@@ -62,12 +77,25 @@ public final class probe_file
                returns="pathname")
     private static class pf_truename extends Primitive {
         pf_truename() {
-            super("truename", "filespec");
+            super(Symbol.TRUENAME, "filespec");
         }
         @Override
         public LispObject execute(LispObject arg)
         {
-            return Pathname.truename(arg, true);
+          Pathname p = coerceToPathname(arg);
+          if (p.isWild()) {
+            return error(new FileError("Cannot find the TRUENAME for a wild pathname.",
+                                       p));
+          }
+
+          // TODO: refactor Pathname{,Jar,URL}.truename() to be non-static?
+          if (p instanceof JarPathname) {
+            return JarPathname.truename(p, true);
+          } else if (p instanceof URLPathname) {
+            return URLPathname.truename((URLPathname)p, true);
+          } else {
+            return Pathname.truename(p, true);
+          }
         }
     };
 
@@ -84,11 +112,36 @@ public final class probe_file
         public LispObject execute(LispObject arg)
         {
             Pathname pathname = coerceToPathname(arg);
-            if (pathname.isWild())
-                error(new FileError("Bad place for a wild pathname.", pathname));
+            if (pathname.isWild()) {
+                error(new FileError("Cannot probe a wild pathname as a directory.", pathname));
+            }
             Pathname defaultedPathname = (Pathname)Pathname.MERGE_PATHNAMES.execute(pathname);
+            if (defaultedPathname instanceof JarPathname) {
+              if (defaultedPathname.getName().equals(NIL)
+                  && defaultedPathname.getType().equals(NIL)) {
+                return Symbol.PROBE_FILE.execute(defaultedPathname);
+              }
+              SimpleString lastDirectory = (SimpleString)Symbol.FILE_NAMESTRING.execute(defaultedPathname);
+              LispObject appendedDirectory 
+                = defaultedPathname.getDirectory().reverse().push(lastDirectory).reverse();
+              defaultedPathname.setDirectory(appendedDirectory);
+              return Symbol.PROBE_FILE.execute(defaultedPathname);
+            }
+            
             File file = defaultedPathname.getFile();
-            return file.isDirectory() ? Pathname.getDirectoryPathname(file) : NIL;
+            if (file == null || !file.isDirectory()) {
+              return NIL;
+            }
+
+            if (defaultedPathname.getName().equals(NIL)
+                && defaultedPathname.getType().equals(NIL)) {
+              return Symbol.PROBE_FILE.execute(defaultedPathname);
+            }
+            SimpleString lastDirectory = (SimpleString)Symbol.FILE_NAMESTRING.execute(defaultedPathname);
+            LispObject appendedDirectory 
+              = defaultedPathname.getDirectory().reverse().push(lastDirectory).reverse();
+            defaultedPathname.setDirectory(appendedDirectory);
+            return Symbol.PROBE_FILE.execute(defaultedPathname);
         }
     };
 
@@ -103,8 +156,8 @@ public final class probe_file
         }
 
         private LispObject isDirectory(Pathname p) {
-            File file = p.getFile();
-            return file.isDirectory() ? T : NIL;
+          LispObject result = PROBE_DIRECTORY.execute(p);
+          return result.equals(NIL) ? NIL : T;
         }
 
         @Override
@@ -112,7 +165,8 @@ public final class probe_file
         {
             Pathname pathname = coerceToPathname(arg);
             if (pathname.isWild()) {
-                error(new FileError("Bad place for a wild pathname.", pathname));
+                error(new FileError("Fundamentally unable to determine whether a wild pathname is a directory.",
+                                    pathname));
             }
             return isDirectory(pathname);
         }
@@ -126,7 +180,8 @@ public final class probe_file
             Pathname pathname = coerceToPathname(arg);
             if (wildErrorP != NIL) {
                 if (pathname.isWild()) {
-                    error(new FileError("Bad place for a wild pathname.", pathname));
+                    error(new FileError("Fundamentally to determine whether a wild pathname is a directory.",
+                                        pathname));
                 }
             }
             return isDirectory(pathname);

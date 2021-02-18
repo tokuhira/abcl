@@ -32,7 +32,9 @@
 
 (in-package "SYSTEM")
 
-(defun pathname-as-file (pathname)
+;;; utility function for LIST-DIRECTORIES-WITH-WILDCARDS
+(defun directory-as-file (pathname)
+  "Convert a PATHNAME referencing a directory to a file"
   (let ((directory (pathname-directory pathname)))
     (make-pathname :host nil
                    :device (pathname-device pathname)
@@ -41,6 +43,7 @@
                    :type nil
                    :version nil)))
 
+;;; utility function for LIST-DIRECTORIES-WITH-WILDCARDS
 (defun wild-inferiors-p (component)
   (eq component :wild-inferiors))
 
@@ -96,6 +99,14 @@
                             resolve-symlinks)))))))
                      entries)))))
 
+;;; The extension to ANSI via :RESOLVE-SYMLINKS was added as
+;;; <https://abcl.org/trac/ticket/340>, in which it was argued that
+;;; symlinks should be considered contents of a directory, and that in
+;;; any event, performing a DIRECTORY on a dangling symlink should not
+;;; signal an error.
+;;;
+;;; See <https://abcl.org/trac/changeset/14624> for additional
+;;; information on implementation decision.
 (defun directory (pathspec &key (resolve-symlinks nil))
   "Determines which, if any, files that are present in the file system have names matching PATHSPEC, and returns a fresh list of pathnames corresponding to the potential truenames of those files.  
 
@@ -132,16 +143,15 @@ error to its caller."
                              (concatenate 'string device ":" namestring))))))
                 (let ((entries (list-directories-with-wildcards 
                                 namestring nil resolve-symlinks))
-                      (matching-entries ()))
+                      matching-entries)
                   (dolist (entry entries)
-                    (when 
-                        (or 
+                    (when
+                        (or
                          (and 
                           (file-directory-p entry :wild-error-p nil)
-                          (pathname-match-p (file-namestring (pathname-as-file entry)) 
-                                            (file-namestring pathname)))
-                         (pathname-match-p (or (file-namestring entry) "") 
-                                           (file-namestring pathname)))
+                          (pathname-match-p
+                           (directory-as-file entry) pathname))
+                         (pathname-match-p entry pathname))
                       (push 
                        (if resolve-symlinks
                            (truename entry) 

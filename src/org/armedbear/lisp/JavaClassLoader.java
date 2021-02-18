@@ -86,8 +86,8 @@ public class JavaClassLoader extends URLClassLoader {
     
     public byte[] getFunctionClassBytes(String name) {
         Pathname pathname 
-            = new Pathname(name.substring("org/armedbear/lisp/".length()) 
-                           + "." + Lisp._COMPILE_FILE_CLASS_EXTENSION_.symbolValue().getStringValue());
+          = (Pathname)Pathname.create(name.substring("org/armedbear/lisp/".length()) 
+                    + "." + Lisp._COMPILE_FILE_CLASS_EXTENSION_.symbolValue().getStringValue());
         return readFunctionBytes(pathname);
     }
 
@@ -323,13 +323,26 @@ public class JavaClassLoader extends URLClassLoader {
     };
 
     protected static void addURL(JavaClassLoader jcl, LispObject jar) {
-        if (jar instanceof Pathname) {
-            jcl.addURL(((Pathname) jar).toURL());
-        } else if (jar instanceof AbstractString) {
-            jcl.addURL(new Pathname(jar.toString()).toURL());
+      URLPathname urlPathname = null;
+      if (jar instanceof URLPathname) {
+        urlPathname = (URLPathname)jar;
+      } else if (jar instanceof Pathname) {
+        urlPathname = URLPathname.createFromFile((Pathname)jar);
+      } else if (jar instanceof AbstractString) {
+        String namestring = jar.getStringValue();
+        if (!Pathname.isValidURL(namestring)) {
+          Pathname p = Pathname.create(namestring);
+          if (p != null) {
+            urlPathname = URLPathname.create(p);
+          }
         } else {
-            error(new TypeError(jar + " must be a pathname designator"));
+          urlPathname = URLPathname.create(namestring);
         }
+      }
+      if (urlPathname == null) {
+        error(new TypeError(jar + " must be a pathname designator"));
+      }
+      jcl.addURL(urlPathname.toURL());
     }
 
 
@@ -337,7 +350,7 @@ public class JavaClassLoader extends URLClassLoader {
         if(o instanceof URLClassLoader) {
             LispObject list = NIL;
             for(URL u : ((URLClassLoader) o).getURLs()) {
-                list = list.push(new Pathname(u));
+                list = list.push(URLPathname.create(u));
             }
             return new Cons(new JavaObject(o), list.nreverse());
         } else {

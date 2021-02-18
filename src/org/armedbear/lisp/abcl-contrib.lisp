@@ -53,11 +53,10 @@ Used to determine relative pathname to find 'abcl-contrib.jar'."
                        :defaults (java:jcall "toString" u)
                        :name "abcl")))
         (java:jcall "getURLs" (boot-classloader)))))
-   #+(or)
    ;; Need to test locating the system boot jar over the network, and
    ;; it would minimally need to check version information.
    (ignore-errors
-     #p"http://abcl.org/releases/current/abcl.jar")))
+     (pathname "jar:https://abcl.org/releases/1.8.0/abcl.jar!/"))))
 
 (defun flatten (list)
   (labels ((rflatten (list accumluator)
@@ -103,6 +102,7 @@ Used to determine relative pathname to find 'abcl-contrib.jar'."
 	      (probe-file (pathname (directory-of entry))))
          (pushnew (pathname (directory-of entry)) result :test 'equal))
         (t
+         #+(or) ;; Possibly informative for debugging new JVM implementations
          (format *standard-output*
                  "~&Skipping enumeration of resource '~a' with type '~a'.~%"
                  entry (type-of entry)))))
@@ -114,8 +114,9 @@ Used to determine relative pathname to find 'abcl-contrib.jar'."
 					     :name "*"
 					     :type "jar"))))
       (let ((jar (some predicate entries)))
-	(when jar
-	  (return-from find-jar jar))))))
+	(when (and jar (probe-file jar))
+	  (return-from find-jar
+            (make-pathname :device (list (probe-file jar)))))))))
 
 (defun find-system-jar ()
   "Return the pathname of the system jar, one of `abcl.jar` or

@@ -1,8 +1,5 @@
 (require :asdf)
 
-(ql:quickload :prove) ;; FIXME
-(ql:quickload :abcl)
+(time 
+ (asdf:test-system :abcl/test/ansi/compiled))
 
-(asdf:load-system :abcl)
-
-(asdf:test-system :abcl/test/ansi/compiled)

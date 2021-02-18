@@ -39,6 +39,7 @@ import java.io.InputStream;
 import java.io.InputStreamReader;
 import java.io.Reader;
 import java.io.StringReader;
+import java.lang.reflect.Method;
 import java.math.BigInteger;
 import java.net.URL;
 import java.nio.charset.Charset;
@@ -427,12 +428,39 @@ public final class Lisp
     return ""; // Not reached
   }
 
+  public static final LispObject parse_error(String message) {
+    return error(new ParseError(message));
+  }
 
+  public static final LispObject simple_error(String formatControl, Object... args) {
+    LispObject lispArgs = NIL;
+    for (int i = 0; i < args.length; i++) {
+      if (args[i] instanceof LispObject) {
+        lispArgs = lispArgs.push((LispObject)args[i]);
+      } else if (args[i] instanceof String) {
+        lispArgs = lispArgs.push(new SimpleString((String)args[i]));
+      } else {
+        lispArgs = lispArgs.push(new JavaObject(args[i]));
+      }
+    }
+    lispArgs = lispArgs.nreverse();
+    
+    LispObject format = new SimpleString(formatControl);
+
+    SimpleError s = new SimpleError(format, lispArgs);
+    return error(s);
+  }
 
   public static final LispObject type_error(LispObject datum,
                                             LispObject expectedType)
   {
     return error(new TypeError(datum, expectedType));
+  }
+
+  public static final LispObject type_error(String message,
+                                            LispObject datum,
+                                            LispObject expectedType)  {
+    return error(new TypeError(message, datum, expectedType));
   }
 
   public static final LispObject program_error(String message)
@@ -1337,7 +1365,7 @@ public final class Lisp
   @Deprecated
   public static final LispObject loadCompiledFunction(final String namestring)
   {
-      Pathname name = new Pathname(namestring);
+    Pathname name = (Pathname)Pathname.create(namestring);
       byte[] bytes = readFunctionBytes(name);
       if (bytes != null)
         return loadClassBytes(bytes);
@@ -1353,13 +1381,13 @@ public final class Lisp
       if (truenameFasl instanceof Pathname) {
           load = Pathname.mergePathnames(name, (Pathname)truenameFasl, Keyword.NEWEST);
       } else if (truename instanceof Pathname) {
-          load = Pathname.mergePathnames(name, (Pathname) truename, Keyword.NEWEST);
+          load = Pathname.mergePathnames(name, (Pathname)truename, Keyword.NEWEST);
       } else {
-          if (!Pathname.truename(name).equals(NIL)) {
-              load = name;
-          } else {
-              load = null;
-          }
+        if (!Symbol.PROBE_FILE.execute(name).equals(NIL)) {
+          load = name;
+        } else {
+          load = null;
+        }
       }
       InputStream input = null;
       if (load != null) {
@@ -1546,8 +1574,8 @@ public final class Lisp
   public static final LispObject UNSIGNED_BYTE_32 =
     list(Symbol.UNSIGNED_BYTE, Fixnum.constants[32]);
 
-  public static final LispObject UNSIGNED_BYTE_32_MAX_VALUE =
-    Bignum.getInstance(4294967296L);
+  public static final LispObject UNSIGNED_BYTE_32_MAX_VALUE
+    = Bignum.getInstance(4294967295L);
 
   public static final LispObject getUpgradedArrayElementType(LispObject type)
 
@@ -1601,9 +1629,9 @@ public final class Lisp
                   }
                 if (lower.isGreaterThanOrEqualTo(Fixnum.ZERO))
                   {
-                    if (lower.isLessThan(UNSIGNED_BYTE_32_MAX_VALUE))
+                    if (lower.isLessThanOrEqualTo(UNSIGNED_BYTE_32_MAX_VALUE))
                       {
-                        if (upper.isLessThan(UNSIGNED_BYTE_32_MAX_VALUE))
+                        if (upper.isLessThanOrEqualTo(UNSIGNED_BYTE_32_MAX_VALUE))
                           return UNSIGNED_BYTE_32;
                       }
                   }
@@ -1630,7 +1658,7 @@ public final class Lisp
               {
                 if (obj.isGreaterThanOrEqualTo(Fixnum.ZERO))
                   {
-                    if (obj.isLessThan(UNSIGNED_BYTE_32_MAX_VALUE))
+                    if (obj.isLessThanOrEqualTo(UNSIGNED_BYTE_32_MAX_VALUE))
                       return UNSIGNED_BYTE_32;
                   }
               }
@@ -1652,14 +1680,20 @@ public final class Lisp
     return T;
   }
 
-  public static final byte coerceLispObjectToJavaByte(LispObject obj)
+  // TODO rename to coerceToJavaChar
+  public static final char coerceToJavaChar(LispObject obj) {
+    return (char)Fixnum.getValue(obj);
+  }
 
-  {
+  public static final byte coerceToJavaByte(LispObject obj) {
           return (byte)Fixnum.getValue(obj);
   }
 
-  public static final LispObject coerceJavaByteToLispObject(byte b)
-  {
+  public static final int coerceToJavaUnsignedInt(LispObject obj) {
+    return (int) (obj.longValue() & 0xffffffffL);
+  }
+  
+  public static final LispObject coerceFromJavaByte(byte b) {
     return Fixnum.constants[((int)b) & 0xff];
   }
 
@@ -1886,16 +1920,17 @@ public final class Lisp
     if (arg instanceof Pathname)
       return (Pathname) arg;
     if (arg instanceof AbstractString)
-      return Pathname.parseNamestring((AbstractString)arg);
+      return (Pathname)Pathname.create(((AbstractString)arg).toString());
     if (arg instanceof FileStream)
       return ((FileStream)arg).getPathname();
     if (arg instanceof JarStream)
       return ((JarStream)arg).getPathname();
     if (arg instanceof URLStream)
       return ((URLStream)arg).getPathname();
-    type_error(arg, list(Symbol.OR, Symbol.PATHNAME,
-                         Symbol.STRING, Symbol.FILE_STREAM,
-                         Symbol.JAR_STREAM, Symbol.URL_STREAM));
+    type_error(arg, list(Symbol.OR,
+                         Symbol.STRING,
+                         Symbol.PATHNAME, Symbol.JAR_PATHNAME, Symbol.URL_PATHNAME,
+                         Symbol.FILE_STREAM, Symbol.JAR_STREAM, Symbol.URL_STREAM));
     // Not reached.
     return null;
   }
@@ -2360,31 +2395,84 @@ public final class Lisp
   {
     Symbol.READ_EVAL.initializeSpecial(T);
   }
+  
 
+  //
   // ### *features*
+  //
   static
   {
     final String osName = System.getProperty("os.name");
     final String javaVersion = System.getProperty("java.version");
     final String osArch = System.getProperty("os.arch");
-
+    
     // Common features
     LispObject featureList = list(Keyword.ARMEDBEAR, Keyword.ABCL,
                                   Keyword.COMMON_LISP, Keyword.ANSI_CL,
-                                  Keyword.CDR6, Keyword.MOP,
+                                  Keyword.CDR6, 
+                                  Keyword.MOP,
                                   internKeyword("PACKAGE-LOCAL-NICKNAMES"));
+    
+    // add the contents of version as a keyword symbol regardless of runtime value
+    featureList = featureList.push(internKeyword("JVM-" + javaVersion));
+    {
+      String platformVersion = null;
+      if (javaVersion.startsWith("1.")) {
+          // pre <https://openjdk.java.net/jeps/223>
+          int i = javaVersion.indexOf(".", 2);
+          platformVersion = javaVersion.substring(2, i);
+        } else {
+          int i = javaVersion.indexOf(".");
+          if (i >= 0) {
+            platformVersion = javaVersion.substring(0, i);
+          } else {
+            platformVersion = javaVersion;
+          }
+      }
+      // We wish to declare an integer Java version, but specialized
+      // builds can suffix further information upon the java.version
+      // property.
+      try {
+	Integer.parseInt(javaVersion);
+      } catch (NumberFormatException e) {
+	for (int i = 0; i < javaVersion.length(); i++) {
+	  char c = javaVersion.charAt(i); // Unicode?
+          if (!Character.isDigit(c)) {
+            // Push the non-conforming keyword for completeness
+            featureList.push(internKeyword("JAVA-" + javaVersion));
+	    platformVersion = javaVersion.substring(0, i);
+	    break;
+	  }
+	}
+      }
+      featureList = featureList.push(internKeyword("JAVA-" + platformVersion));
+    }
+
+    {       // Deprecated java version
+      if (javaVersion.startsWith("1.5")) {
+        featureList = new Cons(Keyword.JAVA_1_5, featureList);
+      } else if (javaVersion.startsWith("1.6")) {
+        featureList = new Cons(Keyword.JAVA_1_6, featureList);
+      } else if (javaVersion.startsWith("1.7")) {
+        featureList = new Cons(Keyword.JAVA_1_7, featureList);
+      } else if (javaVersion.startsWith("1.8")) {
+        featureList = new Cons(Keyword.JAVA_1_8, featureList);
+      }
+    }
+
+    
     // OS type
     if (osName.startsWith("Linux"))
       featureList = Primitives.APPEND.execute(list(Keyword.UNIX,
                                                   Keyword.LINUX),
-                                             featureList);
+                                              featureList);
     else if (osName.startsWith("SunOS"))
       featureList = Primitives.APPEND.execute(list(Keyword.UNIX,
                                                    Keyword.SUNOS,
                                                    Keyword.SOLARIS),
                                               featureList);
-    else if (osName.startsWith("Mac OS X") ||
-             osName.startsWith("Darwin"))
+    else if (osName.startsWith("Mac OS X")
+             || osName.startsWith("Darwin"))
       featureList = Primitives.APPEND.execute(list(Keyword.UNIX,
                                                    Keyword.DARWIN),
                                               featureList);
@@ -2402,25 +2490,25 @@ public final class Lisp
                                               featureList);
     else if (osName.startsWith("Windows"))
       featureList = new Cons(Keyword.WINDOWS, featureList);
-    // Java version
-    if (javaVersion.startsWith("1.5")) {
-        featureList = new Cons(Keyword.JAVA_1_5, featureList);
-    } else if (javaVersion.startsWith("1.6")) {
-        featureList = new Cons(Keyword.JAVA_1_6, featureList);
-    } else if (javaVersion.startsWith("1.7")) {
-        featureList = new Cons(Keyword.JAVA_1_7, featureList);
-    } else if (javaVersion.startsWith("1.8")) {
-        featureList = new Cons(Keyword.JAVA_1_8, featureList);
-    } else if (javaVersion.startsWith("1.9")) {
-        featureList = new Cons(Keyword.JAVA_1_9, featureList);
-    }
+
     // Processor architecture
-    if(osArch != null) {
-      if (osArch.equals("amd64") || osArch.equals("x86_64"))
-        featureList = new Cons(Keyword.X86_64, featureList);
-      else if (osArch.equals("x86") || osArch.equals("i386"))
-        featureList = new Cons(Keyword.X86, featureList);
+    if (osArch != null) {
+      if (osArch.equals("amd64") || osArch.equals("x86_64")) {
+        featureList = featureList.push(Keyword.X86_64);
+      } else if (osArch.equals("x86") || osArch.equals("i386")) {
+        featureList = featureList.push(Keyword.X86);
+      } else {
+        // just push the value of 'os.arch' as a keyword
+        featureList = featureList.push(internKeyword(osArch));
+      }
     }
+
+    // Available Threading models
+
+    if (LispThread.virtualThreadingAvailable()) {
+      featureList = featureList.push(internKeyword("VIRTUAL-THREADS"));
+    }
+    
     Symbol.FEATURES.initializeSpecial(featureList);
   }
 
@@ -2698,7 +2786,7 @@ public final class Lisp
   // ### *disassembler*
   public static final Symbol _DISASSEMBLER_ =
     exportSpecial("*DISASSEMBLER*", PACKAGE_EXT,
-                  new SimpleString("jad -a -p")); // or "jad -dis -p"
+                  new SimpleString("javap -c -verbose")); // or "jad -dis -p"
 
   // ### *speed* compiler policy
   public static final Symbol _SPEED_ =
@@ -2849,4 +2937,8 @@ public final class Lisp
     }
   }
 
+  // A synonym for the null reference which indicates to the reader of
+  // the code that we have performed a non-local exit via the
+  // condition system before this reference is reached.
+  public static java.lang.Object UNREACHED = null;
 }

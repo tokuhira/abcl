@@ -1,31 +1,58 @@
-* ABCL Release Engineering practices
+* ABCL Release Engineering 
 
-** Maven
+See also <https://abcl.org/trac/wiki/ReleaseSteps>.
 
-Instructions for Releasing ABCL on Sonatype's OSS Maven repository
+** Signing binary release
 
-*** settings.xml
+   #+begin_src bash
+   gpg --default-key YOUR-KEY --detach-sign --armor FILE   
+   #+end_src
 
-This assumes your settings.xml (/etc/maven2/settings.xml for
-Ubuntu-packaged Maven) contains something like this in its
-<servers></servers> section:
 
-#+BEGIN_SRC 
- <server>
-   <id>sonatype-nexus-snapshots</id>
-   <username>sonatype-jira-username</username>
-   <password>sonatype-jira-password</password>
- </server>
- <server>
-   <id>sonatype-nexus-staging</id>
-   <username>sonatype-jira-username</username>
-   <password>sonatype-jira-password</password>
- </server>
+   #+begin_src bash
+   key="evenson.not.org@gmail.com"
+   for file in *; do gpg --default-key ${key} --detach-sign --armor ${file} ; done
+   #+end_src
+
+** Maven Artifacts
+
+Instructions for releasing ABCL on Sonatype's OSS Maven repository.
+
+You need a Sonatype account, see
+<https://central.sonatype.org/pages/ossrh-guide.html>.  This will
+result in providing you with a "JIRA username and a password".
+
+**** settings.xml
+
+Enter your "JIRA username and a password" in a
+<file:.m2/settings.xml>.  This will be used for authentication when
+the =mvn= tool uploads artifacts to the Sonatype snapshot and staging
+infrastructure.
+
+#+BEGIN_SRC xml
+  <settings>
+    <servers>
+      <server>
+        <id>sonatype-nexus-snapshots</id>
+        <username>sonatype-jira-username</username>
+        <password>sonatype-jira-password</password>
+      </server>
+      <server>
+        <id>sonatype-nexus-staging</id>
+        <username>sonatype-jira-username</username>
+        <password>sonatype-jira-password</password>
+      </server>
+    </servers>
+  </settings>
 #+END_SRC
 
-*** Process
+**** Process
 
-First, remember to build it!
+Ensure that the artifacts you wish to upload are present by building
+them.
+#+begin_src 
+ant abcl.release abcl.source.jar abcl.javadoc.jar abcl.contrib.javadoc.jar abcl.contrib.source.jar
+#+end_src
 
 #+BEGIN_SRC 
 ant abcl.jar abcl.source.jar abcl.javadoc.jar abcl.contrib
@@ -37,30 +64,48 @@ And maybe test it as well
 ant abcl.test
 #+END_SRC
 
-For snapshots - development versions - the version in the POM should be like x.y.z-SNAPSHOT
+**** Snapshots
+For snapshots (aka development versions) the version in the POM should
+be of the form ~x.y.z-SNAPSHOT~.
 
-#+BEGIN_SRC 
-mvn gpg:sign-and-deploy-file -Dfile=dist/abcl.jar -DpomFile=pom.xml -Durl=https://oss.sonatype.org/content/repositories/snapshots/ -DrepositoryId=sonatype-nexus-snapshots
-mvn gpg:sign-and-deploy-file -Dfile=dist/abcl-sources.jar -DpomFile=pom.xml -Durl=https://oss.sonatype.org/content/repositories/snapshots/ -DrepositoryId=sonatype-nexus-snapshots -Dclassifier=sources
-mvn gpg:sign-and-deploy-file -Dfile=dist/abcl-javadoc.jar -DpomFile=pom.xml -Durl=https://oss.sonatype.org/content/repositories/snapshots/ -DrepositoryId=sonatype-nexus-snapshots -Dclassifier=javadoc
-mvn gpg:sign-and-deploy-file -Dfile=dist/abcl-contrib.jar -DpomFile=contrib/pom.xml -Durl=https://oss.sonatype.org/content/repositories/snapshots/ -DrepositoryId=sonatype-nexus-snapshots 
+#+BEGIN_SRC bash
+keyname='<your_pgp_key@example.com>'
+mvn gpg:sign-and-deploy-file -Dgpg.keyname=${keyname} -Dfile=dist/abcl.jar -DpomFile=pom.xml -Durl=https://oss.sonatype.org/content/repositories/snapshots/ -DrepositoryId=sonatype-nexus-snapshots
+mvn gpg:sign-and-deploy-file -Dgpg.keyname=${keyname} -Dfile=dist/abcl-sources.jar -DpomFile=pom.xml -Durl=https://oss.sonatype.org/content/repositories/snapshots/ -DrepositoryId=sonatype-nexus-snapshots -Dclassifier=sources
+mvn gpg:sign-and-deploy-file -Dgpg.keyname=${keyname} -Dfile=dist/abcl-javadoc.jar -DpomFile=pom.xml -Durl=https://oss.sonatype.org/content/repositories/snapshots/ -DrepositoryId=sonatype-nexus-snapshots -Dclassifier=javadoc
+mvn gpg:sign-and-deploy-file -Dgpg.keyname=${keyname} -Dfile=dist/abcl-contrib.jar -DpomFile=contrib/pom.xml -Durl=https://oss.sonatype.org/content/repositories/snapshots/ -DrepositoryId=sonatype-nexus-snapshots 
 #+END_SRC
 
-For releases - the version in the POM should be x.y.z
+**** Release
+For releases the version in the POM should be of the form  ~x.y.z~
 
-#+BEGIN_SRC 
-mvn gpg:sign-and-deploy-file -Dfile=dist/abcl.jar -DpomFile=pom.xml -Durl=https://oss.sonatype.org/service/local/staging/deploy/maven2/ -DrepositoryId=sonatype-nexus-staging
-mvn gpg:sign-and-deploy-file -Dfile=dist/abcl-${abcl_version}-sources.jar -DpomFile=pom.xml -Durl=https://oss.sonatype.org/service/local/staging/deploy/maven2/ -DrepositoryId=sonatype-nexus-staging -Dclassifier=sources
-mvn gpg:sign-and-deploy-file -Dfile=dist/abcl-${abcl_version}-javadoc.jar -DpomFile=pom.xml -Durl=https://oss.sonatype.org/service/local/staging/deploy/maven2/ -DrepositoryId=sonatype-nexus-staging -Dclassifier=javadoc
+#+BEGIN_SRC bash
+#keyname='<your_pgg_key@example.com>'
+#abcl_version=1.8.0
+mvn gpg:sign-and-deploy-file -Dgpg.keyname=${keyname} -Dfile=dist/abcl.jar -DpomFile=pom.xml -Durl=https://oss.sonatype.org/service/local/staging/deploy/maven2/ -DrepositoryId=sonatype-nexus-staging
+mvn gpg:sign-and-deploy-file -Dgpg.keyname=${keyname} -Dfile=dist/abcl-${abcl_version}-sources.jar -DpomFile=pom.xml -Durl=https://oss.sonatype.org/service/local/staging/deploy/maven2/ -DrepositoryId=sonatype-nexus-staging -Dclassifier=sources
+mvn gpg:sign-and-deploy-file -Dgpg.keyname=${keyname} -Dfile=dist/abcl-${abcl_version}-javadoc.jar -DpomFile=pom.xml -Durl=https://oss.sonatype.org/service/local/staging/deploy/maven2/ -DrepositoryId=sonatype-nexus-staging -Dclassifier=javadoc
 #+END_SRC
 
 abcl-contrib release
 
-#+BEGIN_SRC 
-mvn gpg:sign-and-deploy-file -Dfile=dist/abcl-contrib.jar -DpomFile=contrib/pom.xml -Durl=https://oss.sonatype.org/service/local/staging/deploy/maven2/ -DrepositoryId=sonatype-nexus-staging 
-mvn gpg:sign-and-deploy-file -Dfile=dist/abcl-contrib-${abcl_version}-sources.jar -DpomFile=contrib/pom.xml -Durl=https://oss.sonatype.org/service/local/staging/deploy/maven2/ -DrepositoryId=sonatype-nexus-staging -Dclassifier=sources
-mvn gpg:sign-and-deploy-file -Dfile=dist/abcl-contrib-${abcl_version}-javadoc.jar -DpomFile=contrib/pom.xml -Durl=https://oss.sonatype.org/service/local/staging/deploy/maven2/ -DrepositoryId=sonatype-nexus-staging -Dclassifier=javadoc
+#+BEGIN_SRC bash
+keyname='<evenson.not.org@gmail.com>'
+abcl_version=1.8.0
+mvn gpg:sign-and-deploy-file -Dgpg.keyname=${keyname} -Dfile=dist/abcl-contrib.jar -DpomFile=contrib/pom.xml -Durl=https://oss.sonatype.org/service/local/staging/deploy/maven2/ -DrepositoryId=sonatype-nexus-staging 
+mvn gpg:sign-and-deploy-file -Dgpg.keyname=${keyname} -Dfile=dist/abcl-contrib-${abcl_version}-sources.jar -DpomFile=contrib/pom.xml -Durl=https://oss.sonatype.org/service/local/staging/deploy/maven2/ -DrepositoryId=sonatype-nexus-staging -Dclassifier=sources
+mvn gpg:sign-and-deploy-file -Dgpg.keyname=${keyname} -Dfile=dist/abcl-contrib-${abcl_version}-javadoc.jar -DpomFile=contrib/pom.xml -Durl=https://oss.sonatype.org/service/local/staging/deploy/maven2/ -DrepositoryId=sonatype-nexus-staging -Dclassifier=javadoc
 #+END_SRC
+
+**** Releasing through Sonatype interface
+<https://www.sonatype.org/nexus/2015/06/02/how-to-publish-software-artifacts-to-maven-central/>
+<https://central.sonatype.org/pages/releasing-the-deployment.html>
+
+1. "Close" the repo
+
+2. wait
+
+3. "Release" the repo
 
 **** Testing downloads 
 
@@ -68,11 +113,22 @@ mvn gpg:sign-and-deploy-file -Dfile=dist/abcl-contrib-${abcl_version}-javadoc.ja
 mvn org.apache.maven.plugins:maven-dependency-plugin:2.1:get -DrepoUrl=https://oss.sonatype.org/content/repositories/snapshots -Dartifact=org.abcl:abcl-contrib:1.5.0-SNAPSHOT:jar
 #+END_SRC
 
-*** See also
-<http://www.sonatype.org/nexus/2015/06/02/how-to-publish-software-artifacts-to-maven-central/>
-<http://central.sonatype.org/pages/releasing-the-deployment.html>
 
-*** Specifiying GPG executable
+**** Specifying GPG executable
 
-For specifying gpg executable, use a property specified via
-'-Dgpg.executable=gpg2'.
+For specifying the =gpg= executable used via =mvn= use a property
+specified via the =gpg.executable= property (e.g. '-Dgpg.executable=gpg2'.)
+
+** Update CLiki page
+   <https://www.cliki.net/ABCL>
+Roswell parses it for release information?
+
+** Update MacPorts lang/abcl
+
+* Colophon
+  
+  #+begin_example
+  Created: ??
+  Revised: <2020-10-31 Sat 09:11>
+  #+end_example
+  

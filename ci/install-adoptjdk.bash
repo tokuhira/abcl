@@ -17,26 +17,42 @@ function determine_adoptjdk() {
         Darwin)
             case $jdk in
                 openjdk8)
-                    topdir=jdk8u232-b09
-                    dist="https://github.com/AdoptOpenJDK/openjdk8-binaries/releases/download/jdk8u232-b09/OpenJDK8U-jdk_x64_mac_hotspot_8u232b09.tar.gz"
+                    topdir=jdk8u265-b01
+                    dist="https://github.com/AdoptOpenJDK/openjdk8-binaries/releases/download/jdk8u265-b01/OpenJDK8U-jdk_x64_mac_hotspot_8u265b01.tar.gz"
                     ;;
                 openjdk11)
-                    topdir=jdk-11.0.5+10
-                    dist="https://github.com/AdoptOpenJDK/openjdk11-binaries/releases/download/jdk-11.0.5%2B10/OpenJDK11U-jdk_x64_mac_hotspot_11.0.5_10.tar.gz"
+                    topdir=jdk-11.0.8+10
+                    dist="https://github.com/AdoptOpenJDK/openjdk11-binaries/releases/download/jdk-11.0.8%2B10/OpenJDK11U-jdk_x64_mac_hotspot_11.0.8_10.tar.gz"
                     ;;
-            esac
+                openjdk14)
+                    topdir=jdk-14.0.2+12
+                    dist="https://github.com/AdoptOpenJDK/openjdk14-binaries/releases/download/jdk-14.0.2%2B12/OpenJDK14U-jdk_x64_mac_hotspot_14.0.2_12.tar.gz"
+                    ;;
+                openjdk15)
+                    topdir=jdk-15+36
+                    dist="https://github.com/AdoptOpenJDK/openjdk15-binaries/releases/download/jdk-15%2B36/OpenJDK15U-jdk_x64_mac_hotspot_15_36.tar.gz"
+                    ;;
+esac
             ;;
         Linux)
             case $jdk in
                 openjdk8)
-                    topdir=jdk8u232-b09
-                    dist="https://github.com/AdoptOpenJDK/openjdk8-binaries/releases/download/${topdir}/OpenJDK8U-jdk_x64_linux_hotspot_8u232b09.tar.gz"
+                    topdir=jdk8u265-b01
+                    dist="https://github.com/AdoptOpenJDK/openjdk8-binaries/releases/download/jdk8u265-b01/OpenJDK8U-jdk_x64_linux_hotspot_8u265b01.tar.gz"
                     ;;
                 openjdk11)
-                    topdir=jdk-11.0.5+10
-                    dist="https://github.com/AdoptOpenJDK/openjdk11-binaries/releases/download/jdk-11.0.5%2B10/OpenJDK11U-jdk_x64_linux_hotspot_11.0.5_10.tar.gz"
+                    topdir=jdk-11.0.8+10
+                    dist="https://github.com/AdoptOpenJDK/openjdk11-binaries/releases/download/jdk-11.0.8%2B10/OpenJDK11U-jdk_x64_linux_hotspot_11.0.8_10.tar.gz"
                     ;;
-            esac
+                openjdk14)
+                    topdir=jdk-14.0.2+12
+                    dist="https://github.com/AdoptOpenJDK/openjdk14-binaries/releases/download/jdk-14.0.2%2B12/OpenJDK14U-jdk_x64_linux_hotspot_14.0.2_12.tar.gz"
+                    ;;
+                openjdk15)
+                    topdir=jdk-15+36
+                    dist="https://github.com/AdoptOpenJDK/openjdk15-binaries/releases/download/jdk-15%2B36/OpenJDK15U-jdk_x64_linux_hotspot_15_36.tar.gz"
+                    ;;
+esac
             ;;
         *)
             echo No known dist for $(uname)
@@ -73,10 +89,3 @@ add_jdk
 . ${DIR}/set-jdk.bash
 
 jenv doctor
-
-
-
-
-
-
-

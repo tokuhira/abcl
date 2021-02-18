@@ -562,7 +562,7 @@
   t)
 
 ;; If the prefix isn't a defined logical host, it's not a logical pathname.
-#-(or cmu (and clisp windows))
+#-(or ccl cmu (and clisp windows))
 ;; CMUCL parses this as (:ABSOLUTE #<SEARCH-LIST foo>) "bar.baz" "42".
 ;; CLISP signals a parse error reading #p"foo:bar.baz.42".
 (deftest logical.1
@@ -1334,8 +1334,9 @@
 #+lispworks
 (pushnew 'sbcl.26 *expected-failures*)
 
-(setf (logical-pathname-translations "scratch")
-      '(("**;*.*.*" "/usr/local/doc/**/*")))
+(eval-when (:compile-toplevel :load-toplevel :execute)
+  (setf (logical-pathname-translations "scratch")
+        '(("**;*.*.*" "/usr/local/doc/**/*"))))
 
 ;; Trivial merge.
 (deftest sbcl.27
@@ -1676,19 +1677,6 @@
     (handler-case 
         (make-pathname :directory #p"/tmp/")
       (type-error () t))
-  t)
-
-(deftest pathname.uri-encoding.1
-    (signals-error
-     (let ((s "file:/path with /spaces"))
-       (equal s
-              (namestring (pathname s))))
-     'error)
-  t)
-
-(deftest pathname.uri-encoding.2
-    (string-equal "/path with/uri-escaped/?characters/"
-                  (namestring (pathname "file:/path%20with/uri-escaped/%3fcharacters/")))
   t)
 
 (deftest pathname.load.1

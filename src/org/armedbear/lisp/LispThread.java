@@ -34,6 +34,8 @@
 package org.armedbear.lisp;
 
 import java.lang.ref.WeakReference;
+import java.lang.reflect.Method;
+import java.lang.reflect.InvocationTargetException;
 import static org.armedbear.lisp.Lisp.*;
 
 import java.util.Iterator;
@@ -85,6 +87,57 @@ public final class LispThread extends LispObject
         name = new SimpleString(javaThread.getName());
     }
 
+  public static boolean virtualThreadingAvailable() {
+    try {
+      Class clazz = Class.forName("java.lang.Thread");
+      Class[] parameters = { java.lang.Runnable.class };
+      Method method = clazz.getDeclaredMethod("startVirtualThread", parameters);
+      return true;
+    } catch (ClassNotFoundException e1) {
+      Debug.trace("Failed to get java.lang.Thread by name");
+    } catch (NoSuchMethodException e2) {
+      // This is the case in non-Loom JVMs
+    } catch (SecurityException e3) {
+      Debug.trace("SecurityException caught introspecting threading interface: " + e3.toString());
+    }
+    return false;
+  }
+
+  public static Symbol NATIVE_THREADS = internKeyword("NATIVE");
+  public static Symbol VIRTUAL_THREADS = internKeyword("VIRTUAL");
+
+  static {
+    if (virtualThreadingAvailable()) {
+      Symbol._THREADING_MODEL.initializeSpecial(VIRTUAL_THREADS);
+    } else { 
+      Symbol._THREADING_MODEL.initializeSpecial(NATIVE_THREADS);
+    }
+  }
+
+  static Method threadBuilder = null;
+  static Method builderName = null;
+  static Method builderDaemon = null;
+  static Method builderVirtual = null;
+  static Method builderTask = null;
+  static Method builderBuild = null;
+
+  static {
+    try {
+      Class clazz = Class.forName("java.lang.Thread");
+      threadBuilder = clazz.getDeclaredMethod("builder");
+      clazz = Class.forName("java.lang.Thread$Builder");
+      builderDaemon = clazz.getDeclaredMethod("daemon", boolean.class);
+      builderName = clazz.getDeclaredMethod("name", String.class);
+      builderVirtual = clazz.getDeclaredMethod("virtual");
+      builderTask = clazz.getDeclaredMethod("task", java.lang.Runnable.class);
+      builderBuild = clazz.getDeclaredMethod("build");
+    } catch (Exception e) {
+      if (virtualThreadingAvailable()) {
+	Debug.trace("Failed to introspect virtual threading methods: " + e);
+      }
+    }
+  }
+
     LispThread(final Function fun, LispObject name)
     {
         Runnable r = new Runnable() {
@@ -116,13 +169,43 @@ public final class LispThread extends LispObject
                 }
             }
         };
-        javaThread = new Thread(r);
-        this.name = name;
-        map.put(javaThread, this);
-        if (name != NIL)
-            javaThread.setName(name.getStringValue());
-        javaThread.setDaemon(true);
-        javaThread.start();
+	this.name = name;
+
+	Thread thread = null;
+	
+	if (Symbol._THREADING_MODEL.getSymbolValue().equals(NATIVE_THREADS)) {
+	  thread = new Thread(r);
+	  if (name != NIL) {
+            thread.setName(name.getStringValue());
+	  }
+	  thread.setDaemon(true);
+	} else {
+	  synchronized (threadBuilder) { // Thread.Builder isn't thread safe
+	    Object o = null;
+	    try {
+	      o = threadBuilder.invoke(null);
+	      if (name != NIL) {
+		o = builderName.invoke(o, name.getStringValue());
+	      }
+	      o = builderDaemon.invoke(o, true);
+	      o = builderVirtual.invoke(o);
+	      o = builderTask.invoke(o, r);
+	      thread = (java.lang.Thread)builderBuild.invoke(o);
+	    } catch (IllegalAccessException e1) {
+	      Debug.trace("Use of reflection to start virtual thread failed: " + e1.toString());
+	    } catch (InvocationTargetException e2) {
+	      Debug.trace("Failed to invoke method to start virtual thread: " + e2.toString());
+	    }
+	  }
+	}
+	if (thread == null) {
+	  Debug.trace("Failed to create java.lang.Thread");
+	  javaThread = null;
+	} else {
+	  javaThread = thread;
+	  map.put(javaThread, this);
+	  javaThread.start();
+	}
     }
 
     public StackTraceElement[] getJavaStackTrace() {
@@ -1137,7 +1220,9 @@ public final class LispThread extends LispObject
         return unreadableString(sb.toString());
     }
 
-    @DocString(name="make-thread", args="function &key name")
+    @DocString(name="make-thread",
+               args="function &key name",
+               doc="Create a thread of execution running FUNCTION possibly named NAME")
     private static final Primitive MAKE_THREAD =
         new Primitive("make-thread", PACKAGE_THREADS, true, "function &key name")
     {
@@ -1163,8 +1248,9 @@ public final class LispThread extends LispObject
         }
     };
 
-    @DocString(name="threadp", args="object",
-    doc="Boolean predicate testing if OBJECT is a thread.")
+    @DocString(name="threadp",
+               args="object",
+               doc="Boolean predicate returning non-nil if OBJECT is a lisp thread")
     private static final Primitive THREADP =
         new Primitive("threadp", PACKAGE_THREADS, true)
     {
@@ -1175,11 +1261,12 @@ public final class LispThread extends LispObject
         }
     };
 
-    @DocString(name="thread-alive-p", args="thread",
-    doc="Returns T if THREAD is alive.")
+    @DocString(name="thread-alive-p",
+               args="thread",
+               doc="Returns T if THREAD is alive.")
     private static final Primitive THREAD_ALIVE_P =
-        new Primitive("thread-alive-p", PACKAGE_THREADS, true, "thread",
-              "Boolean predicate whether THREAD is alive.")
+      new Primitive("thread-alive-p", PACKAGE_THREADS, true, "thread",
+                    "Boolean predicate whether THREAD is alive.")
     {
         @Override
         public LispObject execute(LispObject arg)
@@ -1195,8 +1282,9 @@ public final class LispThread extends LispObject
         }
     };
 
-    @DocString(name="thread-name", args="thread",
-    doc="Return the name of THREAD, if it has one.")
+    @DocString(name="thread-name",
+               args="thread",
+               doc="Return the name of THREAD, if it has one.")
     private static final Primitive THREAD_NAME =
         new Primitive("thread-name", PACKAGE_THREADS, true)
     {
@@ -1211,13 +1299,15 @@ public final class LispThread extends LispObject
     };
 
     private static final Primitive THREAD_JOIN =
-        new Primitive("thread-join", PACKAGE_THREADS, true, "thread",
-                      "Waits for thread to finish.")
+      new Primitive("thread-join", PACKAGE_THREADS, true, "thread",
+                    "Waits for THREAD to die before resuming execution\n"
+                    + "Returns the result of the joined thread as its primary value.\n"
+                    + "Returns T if the joined thread finishes normally or NIL if it was interrupted.")
     {
         @Override
         public LispObject execute(LispObject arg)
         {
-            // join the thread, and returns it's value.  The second return
+            // join the thread, and returns its value.  The second return
             // value is T if the thread finishes normally, NIL if its 
             // interrupted. 
             if (arg instanceof LispThread) {                

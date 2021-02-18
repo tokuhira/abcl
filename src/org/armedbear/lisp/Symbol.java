@@ -3092,8 +3092,8 @@ public class Symbol extends LispObject implements java.io.Serializable
     PACKAGE_SYS.addExternalSymbol("%DOCUMENTATION");
   public static final Symbol _ENABLE_AUTOCOMPILE_ =
     PACKAGE_SYS.addExternalSymbol("*ENABLE-AUTOCOMPILE*");
-  public static final Symbol ENSURE_INPUT_STREAM =
-    PACKAGE_SYS.addExternalSymbol("ENSURE-INPUT-STREAM");
+  public static final Symbol GET_INPUT_STREAM =
+    PACKAGE_SYS.addExternalSymbol("GET-INPUT-STREAM");
   public static final Symbol ENVIRONMENT =
     PACKAGE_SYS.addExternalSymbol("ENVIRONMENT");
   public static final Symbol FINALIZED_P =
@@ -3110,6 +3110,8 @@ public class Symbol extends LispObject implements java.io.Serializable
     PACKAGE_SYS.addExternalSymbol("JAR-STREAM");
   public static final Symbol LAYOUT =
     PACKAGE_SYS.addExternalSymbol("LAYOUT");
+  public static final Symbol MATCH_WILD_JAR_PATHNAME =
+    PACKAGE_SYS.addExternalSymbol("MATCH-WILD-JAR-PATHNAME");
   public static final Symbol NAME =
     PACKAGE_SYS.addExternalSymbol("NAME");
   public static final Symbol NAMED_LAMBDA =
@@ -3235,6 +3237,8 @@ public class Symbol extends LispObject implements java.io.Serializable
     PACKAGE_SYS.addInternalSymbol("READERS");
   public static final Symbol REQUIRED_ARGS =
     PACKAGE_SYS.addInternalSymbol("REQUIRED-ARGS");
+  public static final Symbol READ_RANDOM_STATE =
+    PACKAGE_SYS.addInternalSymbol("READ-RANDOM-STATE");
   // DEPRECATED: to be removed with abcl-1.7
   public static final Symbol _SOURCE =
     PACKAGE_SYS.addInternalSymbol("%SOURCE");
@@ -3265,6 +3269,9 @@ public class Symbol extends LispObject implements java.io.Serializable
   // THREADS
   public static final Symbol THREAD =
     PACKAGE_THREADS.addExternalSymbol("THREAD");
+  public static final Symbol _THREADING_MODEL =
+    PACKAGE_THREADS.addExternalSymbol("*THREADING-MODEL*");
+    
 
   // JVM
   public static final Symbol _RESIGNAL_COMPILER_WARINGS_ =

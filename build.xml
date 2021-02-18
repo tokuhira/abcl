@@ -193,11 +193,18 @@ For help on the automatic tests available, use the Ant target 'help.test'.
       </echo>
     </target>
 
-    <!-- For compiling beyond openjdk11, one needs to increment these values in <file:abcl.properties> -->
-    <property name="abcl.javac.target"
-              value="1.6"/>
-    <property name="abcl.javac.source"
-              value="1.6"/>
+    <!-- The Java compilation options are perhaps underspecified in
+         terms of the target JVM in order to support a developer who
+         simply wants to compile and run locally with least hassles.
+	 
+	 When preparing ABCL binaries for wider distribution, the
+	 values of the abcl.build.target.javac and
+	 abcl.build.source.java become more important.  
+
+         The 'abcl.properties.autoconfigure.*' targets use the
+         ci/create-build-properties.bash script to set these options
+         for various openjdk platforms.
+    -->
 
     <target name="abcl.compile.java" 
             depends="abcl.init,abcl.java.warning">
@@ -205,9 +212,8 @@ For help on the automatic tests available, use the Ant target 'help.test'.
       <mkdir dir="${build.classes.dir}"/>
       <javac destdir="${build.classes.dir}"
              debug="true"
-             target="${abcl.javac.target}"
-             source="${abcl.javac.source}"
              includeantruntime="false"
+             encoding="UTF-8"
              failonerror="true">
         <src path="${src.dir}"/>
         <patternset refid="abcl.source.java"/>
@@ -775,6 +781,8 @@ will compile (if necessary) and load JSS.
 
       <include name="doc/**/*"/>
 
+      <include name="ci/**/*"/>
+
       <!-- FIXME:  currently necessary to build from our source archives -->
       <include name="nbproject/**/*"/>
     </patternset>
@@ -1011,8 +1019,8 @@ ${basedir}/../cl-bench
 
     <target name="abcl.ext" depends="abcl.ext.p" unless="abcl.ext.p">
       <mkdir dir="${abcl.ext.dir}"/>
-      <get 
-          src="http://cloud.github.com/downloads/KentBeck/junit/junit-4.8.1.jar"
+      <get
+          src="https://repo1.maven.org/maven2/junit/junit/4.8.1/junit-4.8.1.jar"
           usetimestamp="true"
           dest="${junit.path}"/>
       <get 
@@ -1056,6 +1064,7 @@ ${basedir}/../cl-bench
         <arg value="org.armedbear.lisp.StreamTest"/>
         <arg value="org.armedbear.lisp.SeekableStringWriterTest"/>
         <arg value="org.armedbear.lisp.UtilitiesTest"/>
+        <arg value="org.armedbear.lisp.serialization.SerializationTest"/>
 		<!-- currently hangs(!) the running process
         <arg value="org.armedbear.lisp.util.HttpHeadTest"/>
 		-->
@@ -1192,21 +1201,29 @@ user.dir
 -->
 
 <target name="abcl.build.diagnostic" description="Emit diagnostics describing available hosting JVM properties.">
-  <echo>:java.version    ${java.version}</echo>
-  <echo>:java.vendor     ${java.vendor}</echo>
-  <echo>:java.vm.vendor  ${java.vm.vendor}</echo>
-  <echo>:java.vm.name    ${java.vm.name}</echo>
+  <echo>
+JVM System Properties
+=====================
+:java.version    ${java.version}
+:java.vendor     ${java.vendor}
+:java.vm.vendor  ${java.vm.vendor}
+:java.vm.name    ${java.vm.name}
 
-  <echo>:os.name    ${os.name}</echo>
-  <echo>:os.arch    ${os.arch}</echo>
-  <echo>:os.version ${os.version}</echo>
+:os.name         ${os.name}
+:os.arch         ${os.arch}
+:os.version      ${os.version}
   
-  <echo>:java.specification.version       ${java.specification.version}</echo>
-  <echo>:java.vm.specification.version    ${java.vm.specification.version}</echo>
+:java.specification.version
+                 ${java.specification.version}
+:java.vm.specification.version
+                 ${java.vm.specification.version}
+  </echo>
+
+  <echoproperties/>
 </target>
 
     <target name="abcl.release" 
-            depends="abcl.clean,abcl.binary.tar,abcl.source.tar,abcl.binary.zip,abcl.source.zip">
+            depends="abcl.clean,abcl.properties.autoconfigure.openjdk.8,abcl.binary.tar,abcl.source.tar,abcl.binary.zip,abcl.source.zip,abcl.wrapper">
       <copy file="${abcl.jar.path}"
             tofile="${dist.dir}/abcl-${abcl.version}.jar"/>
       <copy file="${abcl-contrib.jar}"
@@ -1214,7 +1231,7 @@ user.dir
     </target>
 
     <target name="abcl.documentation"
-            depends="abcl.documentation.manual,abcl.documentation.asdf"/>
+            depends="abcl.stamp.version.generate,abcl.documentation.manual,abcl.documentation.asdf"/>
     <target name="abcl.documentation.manual"
             depends="abcl.stamp.version">
       <echo>This target requires 'make' and a LaTeX installation to be on the PATH.</echo>
@@ -1233,6 +1250,64 @@ user.dir
       </exec>
       <copy file="doc/asdf/asdf.pdf"
             tofile="${dist.dir}/asdf.pdf"/>
+    </target>
+
+    <target name="abcl.properties.autoconfigure.openjdk.6">
+      <exec executable="/usr/bin/env">
+        <arg value="bash"/>
+        <arg value="ci/create-abcl-properties.bash"/>
+        <arg value="openjdk6"/>
+      </exec>
+    </target>
+
+
+    <target name="abcl.properties.autoconfigure.openjdk.7">
+      <exec executable="/usr/bin/env">
+        <arg value="bash"/>
+        <arg value="ci/create-abcl-properties.bash"/>
+        <arg value="openjdk7"/>
+      </exec>
+    </target>
+
+
+    <target name="abcl.properties.autoconfigure.openjdk.8">
+      <exec executable="/usr/bin/env">
+        <arg value="bash"/>
+        <arg value="ci/create-abcl-properties.bash"/>
+        <arg value="openjdk8"/>
+      </exec>
+    </target>
+
+      <target name="abcl.properties.autoconfigure.openjdk.11">
+      <exec executable="/usr/bin/env">
+        <arg value="bash"/>
+        <arg value="ci/create-abcl-properties.bash"/>
+        <arg value="openjdk11"/>
+      </exec>
+    </target>
+
+    <target name="abcl.properties.autoconfigure.openjdk.14">
+      <exec executable="/usr/bin/env">
+        <arg value="bash"/>
+        <arg value="ci/create-abcl-properties.bash"/>
+        <arg value="openjdk14"/>
+      </exec>
+    </target>
+
+    <target name="abcl.properties.autoconfigure.openjdk.15">
+      <exec executable="/usr/bin/env">
+        <arg value="bash"/>
+        <arg value="ci/create-abcl-properties.bash"/>
+        <arg value="openjdk15"/>
+      </exec>
+    </target>
+
+    <target name="abcl.properties.autoconfigure.openjdk.16">
+      <exec executable="/usr/bin/env">
+        <arg value="bash"/>
+        <arg value="ci/create-abcl-properties.bash"/>
+        <arg value="openjdk16"/>
+      </exec>
     </target>
 
     <import file="etc/ant/netbeans-build.xml"
